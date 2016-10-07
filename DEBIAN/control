@@ -3,10 +3,10 @@ Section: utils
 Priority: optional
 Maintainer: Zcash Team <team@z.cash>
 Homepage: https://z.cash
-Build-Depends: build-essential, pkg-config, libc6-dev, m4, 
- g++-multilib, autoconf, libtool, ncurses-dev, 
- unzip, git, python, zlib1g-dev,
- wget, bsdmainutils, automake
+Build-Depends: autoconf, automake, bsdmainutils, build-essential
+ git, g++-multilib, libc6-dev, libtool
+ m4, ncurses-dev, pkg-config, python
+ unzip, wget, zlib1g-dev
 Vcs-Git: git@github.com:zcash/zcash.git
 Vcs-Browser: https://github.com/zcash/zcash
 Package: zcash
