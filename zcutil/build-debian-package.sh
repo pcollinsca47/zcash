@@ -15,7 +15,7 @@ if [ ! -d $BUILD_PATH ]; then
     mkdir $BUILD_PATH
 fi
 
-PACKAGE_VERSION=$(grep Version $SRC_PATH/DEBIAN/control | cut -d: -f2 | tr -d ' ')
+PACKAGE_VERSION=$(grep Version $SRC_PATH/contrib/DEBIAN/control | cut -d: -f2 | tr -d ' ')
 BUILD_DIR="$BUILD_PATH/$PACKAGE_NAME-$PACKAGE_VERSION-amd64"
 
 if [ -d $BUILD_DIR ]; then
@@ -23,7 +23,7 @@ if [ -d $BUILD_DIR ]; then
 fi
 mkdir -p $BUILD_DIR/DEBIAN $BUILD_DIR/usr/bin $BUILD_DIR/usr/local/bin
 
-cp -r $SRC_PATH/DEBIAN/* $BUILD_DIR/DEBIAN/
+cp -r $SRC_PATH/contrib/DEBIAN/* $BUILD_DIR/DEBIAN/
 cp $SRC_PATH/src/zcashd $BUILD_DIR/usr/bin/
 cp $SRC_PATH/src/zcash-cli $BUILD_DIR/usr/bin/
 cp $SRC_PATH/zcutil/fetch-params.sh $BUILD_DIR/usr/local/bin/zcash-fetch-params
