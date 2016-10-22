@@ -509,25 +509,6 @@ void static BitcoinMiner(CWallet *pwallet)
             arith_uint256 hashTarget = arith_uint256().SetCompact(pblock->nBits);
 
             while (true) {
-                // Hash state
-                crypto_generichash_blake2b_state state;
-                EhInitialiseState(n, k, state);
-
-                // I = the block header minus nonce and solution.
-                CEquihashInput I{*pblock};
-                CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
-                ss << I;
-
-                // H(I||...
-                crypto_generichash_blake2b_update(&state, (unsigned char*)&ss[0], ss.size());
-
-                // H(I||V||...
-                crypto_generichash_blake2b_state curr_state;
-                curr_state = state;
-                crypto_generichash_blake2b_update(&curr_state,
-                                                  pblock->nNonce.begin(),
-                                                  pblock->nNonce.size());
-
                 // (x_1, x_2, ...) = A(I, V, n, k)
                 LogPrint("pow", "Running Equihash solver \"%s\" with nNonce = %s\n",
                          solver, pblock->nNonce.ToString());
@@ -536,7 +517,9 @@ void static BitcoinMiner(CWallet *pwallet)
                         [&pblock, &hashTarget, &pwallet, &reservekey, &m_cs, &cancelSolver, &chainparams]
                         (std::vector<unsigned char> soln) {
                     // Write the solution to the hash and compute the result.
-                    LogPrint("pow", "- Checking solution against target\n");
+                    LogPrint("pow", "- Checking solution against target. GeneratedHash=%s TargetHash=%s\n",
+                    		pblock->GetHash().GetHex(),
+							hashTarget.GetHex());
                     pblock->nSolution = soln;
 
                     if (UintToArith256(pblock->GetHash()) > hashTarget) {
@@ -567,18 +550,26 @@ void static BitcoinMiner(CWallet *pwallet)
 
                 // TODO: factor this out into a function with the same API for each solver.
                 if (solver == "tromp") {
-                    // Create solver and initialize it.
+                    CEquihashInput I{*pblock};
+                    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                    ss << I;
+                    const char *header = (char *)&ss[0];
+                    unsigned int headerLen = ss.size();
+
+                    // Nonce
+                    // Nonce is u256 convert it to u32
+                    const char *nonce = (const char*) pblock->nNonce.begin();
+
+                    // Create solver and initialize it with header and nonce.
                     equi eq(1);
-                    eq.setstate(&curr_state);
+                    eq.setnonce(header, headerLen, nonce, pblock->nNonce.size());
 
                     // Intialization done, start algo driver.
                     eq.digit0(0);
                     eq.xfull = eq.bfull = eq.hfull = 0;
-                    eq.showbsizes(0);
                     for (u32 r = 1; r < WK; r++) {
                         (r&1) ? eq.digitodd(r, 0) : eq.digiteven(r, 0);
                         eq.xfull = eq.bfull = eq.hfull = 0;
-                        eq.showbsizes(r);
                     }
                     eq.digitK(0);
 
@@ -598,6 +589,24 @@ void static BitcoinMiner(CWallet *pwallet)
                         }
                     }
                 } else {
+                    // Hash state
+                    crypto_generichash_blake2b_state state;
+                    EhInitialiseState(n, k, state);
+
+                    // I = the block header minus nonce and solution.
+                    CEquihashInput I{*pblock};
+                    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                    ss << I;
+
+                    // H(I||...
+                    crypto_generichash_blake2b_update(&state, (unsigned char*)&ss[0], ss.size());
+
+                    // H(I||V||...
+                    crypto_generichash_blake2b_state curr_state;
+                    curr_state = state;
+                    crypto_generichash_blake2b_update(&curr_state,
+                                                      pblock->nNonce.begin(),
+                                                      pblock->nNonce.size());
                     try {
                         // If we find a valid block, we rebuild
                         if (EhOptimisedSolve(n, k, curr_state, validBlock, cancelled))

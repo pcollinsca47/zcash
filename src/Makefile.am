@@ -243,25 +243,21 @@ libbitcoin_wallet_a_SOURCES = \
   $(BITCOIN_CORE_H) \
   $(LIBZCASH_H)
 
-EQUIHASH_TROMP_OPTIMIZED_SOURCES = \
-    pow/trompopt/blake/blake2-config.h \
-    pow/trompopt/blake/blake2b-round.h \
-    pow/trompopt/blake/blake2b-load-sse41.h \
-    pow/trompopt/blake/blake2-impl.h \
-    pow/trompopt/blake/blake2b.cpp \
-    pow/trompopt/blake/blake2b-load-sse2.h \
-    pow/trompopt/blake/blake2-round.h \
-    pow/trompopt/blake/blake2.h \
-    pow/trompopt/equi.h \
-    pow/trompopt/equi_miner.h 
-
 EQUIHASH_TROMP_SOURCES = \
+  pow/tromp/blake/blake2-config.h \
+  pow/tromp/blake/blake2b-round.h \
+  pow/tromp/blake/blake2b-load-sse41.h \
+  pow/tromp/blake/blake2-impl.h \
+  pow/tromp/blake/blake2b.cpp \
+  pow/tromp/blake/blake2b-load-sse2.h \
+  pow/tromp/blake/blake2-round.h \
+  pow/tromp/blake/blake2.h \
   pow/tromp/equi_miner.h \
   pow/tromp/equi.h \
   pow/tromp/osx_barrier.h
 
 # crypto primitives library
-crypto_libbitcoin_crypto_a_CPPFLAGS = $(BITCOIN_CONFIG_INCLUDES) -DEQUIHASH_TROMP_ATOMIC
+crypto_libbitcoin_crypto_a_CPPFLAGS = $(BITCOIN_CONFIG_INCLUDES) 
 crypto_libbitcoin_crypto_a_SOURCES = \
   crypto/common.h \
   crypto/equihash.cpp \
@@ -279,8 +275,7 @@ crypto_libbitcoin_crypto_a_SOURCES = \
   crypto/sha256.h \
   crypto/sha512.cpp \
   crypto/sha512.h \
-  ${EQUIHASH_TROMP_SOURCES} \
-  ${EQUIHASH_TROMP_OPTIMIZED_SOURCES}
+  ${EQUIHASH_TROMP_SOURCES}
    
 # univalue JSON library
 univalue_libbitcoin_univalue_a_SOURCES = \
