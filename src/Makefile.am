@@ -275,8 +275,11 @@ crypto_libbitcoin_crypto_a_SOURCES = \
   crypto/sha256.h \
   crypto/sha512.cpp \
   crypto/sha512.h \
-  ${EQUIHASH_TROMP_SOURCES}
-   
+  ${EQUIHASH_TROMP_SOURCES} 
+
+crypto_libbitcoin_crypto_a_LIBADD = \
+  pow/xenoncat/equihash_avx2.o
+ 
 # univalue JSON library
 univalue_libbitcoin_univalue_a_SOURCES = \
   univalue/univalue.cpp \
