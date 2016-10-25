@@ -31,7 +31,16 @@
 #include <boost/tuple/tuple.hpp>
 #include <mutex>
 
+#include <sys/utsname.h>
+
+#define CONTEXT_SIZE 178033152
+
 using namespace std;
+
+// extern interfaces for xenoncat solver.
+extern "C" void EhPrepare(void* context, void* input);
+extern "C" int32_t EhSolver(void *context, uint32_t nonce);
+
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -455,7 +464,7 @@ void static BitcoinMiner(CWallet *pwallet)
     unsigned int k = chainparams.EquihashK();
 
     std::string solver = GetArg("-equihashsolver", "default");
-    assert(solver == "tromp" || solver == "default");
+    assert(solver == "xenoncat" || solver == "tromp" || solver == "default");
     LogPrint("pow", "Using Equihash solver \"%s\" with n = %u, k = %u\n", solver, n, k);
 
     std::mutex m_cs;
@@ -549,7 +558,45 @@ void static BitcoinMiner(CWallet *pwallet)
                 };
 
                 // TODO: factor this out into a function with the same API for each solver.
-                if (solver == "tromp") {
+                if (solver == "xenoncat") {
+                	// Validations.
+                	// Xenoncat solver works only with N=200 & K=9.
+                	assert(WN == 200 && WK ==9);
+
+                	utsname u;
+                	uname(&u);
+
+                	// Xenoncat solver works with x86 64 bit machines only
+                	// (I am not 100% confident about this requirement,
+                	// But it worked on x86_64. so adding check for safety.
+                	assert(u.machine == "x86_64");
+
+                	// Algo
+                	// Generate input
+                    CEquihashInput I{*pblock};
+                    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                    ss << I;
+                    const char *header = (char *)&ss[0];
+                    unsigned int headerLen = ss.size();
+                    // Input block size is 136bytes without 4byte nonce.
+                    assert(headerLen == 136);
+
+                    // Initialize context memory.
+                	void* context_alloc = malloc(CONTEXT_SIZE+4096);
+                	void* context = (void*) (((long) context_alloc+4095) & -4096);
+
+                	// Prepare
+                	EhPrepare(context, (void *) header);
+
+                	// Get last four bytes from pblock->nonce and pass it to
+                	// EhSololver
+                	// int numsolutions = EhSolver(context, *(uint32_t *)(input+136));
+
+                	// Free context data.
+                	free(context_alloc);
+
+                }
+                else if (solver == "tromp") {
                     CEquihashInput I{*pblock};
                     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
                     ss << I;

@@ -277,9 +277,6 @@ crypto_libbitcoin_crypto_a_SOURCES = \
   crypto/sha512.h \
   ${EQUIHASH_TROMP_SOURCES} 
 
-crypto_libbitcoin_crypto_a_LIBADD = \
-  pow/xenoncat/equihash_avx2.o
- 
 # univalue JSON library
 univalue_libbitcoin_univalue_a_SOURCES = \
   univalue/univalue.cpp \
@@ -355,10 +352,16 @@ libbitcoin_cli_a_SOURCES = \
 nodist_libbitcoin_util_a_SOURCES = $(srcdir)/obj/build.h
 #
 
+LIB_EQUIHASHSOLVER_XENONCAT = \
+  pow/xenoncat/equihash_avx2.o
+
+LIB_EQUIHASHSOLVER_XENONCAT_FLAGS = \
+-Wl,--whole-archive $(LIB_EQUIHASHSOLVER_XENONCAT) -Wl,--no-whole-archive
+
 # bitcoind binary #
 zcashd_SOURCES = bitcoind.cpp
 zcashd_CPPFLAGS = $(BITCOIN_INCLUDES)
-zcashd_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
+zcashd_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(LIB_EQUIHASHSOLVER_XENONCAT_FLAGS)
 
 if TARGET_WINDOWS
 zcashd_SOURCES += bitcoind-res.rc
@@ -373,7 +376,7 @@ zcashd_LDADD = \
   $(LIBZCASH) \
   $(LIBLEVELDB) \
   $(LIBMEMENV) \
-  $(LIBSECP256K1)
+  $(LIBSECP256K1) 
 
 if ENABLE_WALLET
 zcashd_LDADD += libbitcoin_wallet.a
