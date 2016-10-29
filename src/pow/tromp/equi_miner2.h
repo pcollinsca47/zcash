@@ -25,6 +25,7 @@
 #include <pthread.h>
 #endif
 #include <assert.h>
+//#include "util.h"
 
 typedef uint16_t u16;
 typedef uint64_t u64;
@@ -43,29 +44,16 @@ typedef u32 au32;
 // 2_log of number of buckets
 #define BUCKBITS (DIGITBITS-RESTBITS)
 
-#ifndef SAVEMEM
-#if RESTBITS == 4
-// can't save memory in such small buckets
-#define SAVEMEM 1
-#elif RESTBITS >= 8
-// take advantage of law of large numbers (sum of 2^8 random numbers)
-// this reduces (200,9) memory to under 144MB, with negligible discarding
-#define SAVEMEM 9/14
-#endif
-#endif
-
 // number of buckets
 static const u32 NBUCKETS = 1<<BUCKBITS;
 // 2_log of number of slots per bucket
 static const u32 SLOTBITS = RESTBITS+1+1;
-static const u32 SLOTRANGE = 1<<SLOTBITS;
-static const u32 SLOTMSB = 1<<(SLOTBITS-1);
 // number of slots per bucket
-static const u32 NSLOTS = SLOTRANGE * SAVEMEM;
+static const u32 NSLOTS = 1<<SLOTBITS;
 // number of per-xhash slots
-static const u32 XFULL = 16;
+static const u32 XFULL = 12;
 // SLOTBITS mask
-static const u32 SLOTMASK = SLOTRANGE-1;
+static const u32 SLOTMASK = NSLOTS-1;
 // number of possible values of xhash (rest of n) bits
 static const u32 NRESTS = 1<<RESTBITS;
 // number of blocks of hashes extracted from single 512 bit blake2b output
@@ -76,42 +64,17 @@ static const u32 MAXSOLS = 8;
 // tree node identifying its children as two different slots in
 // a bucket on previous layer with the same rest bits (x-tra hash)
 struct tree {
-  u32 bid_s0_s1; // manual bitfields
+  unsigned bucketid : BUCKBITS;
+  unsigned slotid0  : SLOTBITS;
+  unsigned slotid1  : SLOTBITS;
 
-  tree(const u32 idx) {
-    bid_s0_s1 = idx;
-  }
-  tree(const u32 bid, const u32 s0, const u32 s1) {
-#ifdef SLOTDIFF
-    u32 ds10 = (s1 - s0) & SLOTMASK;
-    if (ds10 & SLOTMSB) {
-      bid_s0_s1 = (((bid << SLOTBITS) | s1) << (SLOTBITS-1)) | (SLOTMASK & ~ds10);
-    } else {
-      bid_s0_s1 = (((bid << SLOTBITS) | s0) << (SLOTBITS-1)) | (ds10 - 1);
-    }
-#else
-    bid_s0_s1 = (((bid << SLOTBITS) | s0) << SLOTBITS) | s1;
-#endif
-  }
+// layer 0 has no children bit needs to encode index
   u32 getindex() const {
-    return bid_s0_s1;
+    return (bucketid << SLOTBITS) | slotid0;
   }
-  u32 bucketid() const {
-    return bid_s0_s1 >> (32 - BUCKBITS);
-  }
-  u32 slotid0() const {
-#ifdef SLOTDIFF
-    return (bid_s0_s1 >> (SLOTBITS-1)) & SLOTMASK;
-#else
-    return (bid_s0_s1 >> SLOTBITS) & SLOTMASK;
-#endif
-  }
-  u32 slotid1() const {
-#ifdef SLOTDIFF
-    return (slotid0() + 1 + (bid_s0_s1 & (SLOTMASK>>1))) & SLOTMASK;
-#else
-    return bid_s0_s1 & SLOTMASK;
-#endif
+  void setindex(const u32 idx) {
+    slotid0 = idx & SLOTMASK;
+    bucketid = idx >> SLOTBITS;
   }
 };
 
@@ -227,9 +190,9 @@ struct equi {
     free(sols);
   }
   void setnonce(const char *header, const u32 headerLen, const char* nonce, u32 nonceLen) {
-	  setheader(&blake_ctx, header, headerLen, nonce, nonceLen);
-	  memset(nslots, 0, NBUCKETS * sizeof(au32)); // only nslots[0] needs zeroing
-	  nsols = 0;
+    setheader(&blake_ctx, header, headerLen, nonce, nonceLen);
+    memset(nslots, 0, NBUCKETS * sizeof(au32)); // only nslots[0] needs zeroing
+    nsols = 0;
   }
   u32 getslot(const u32 r, const u32 bucketi) {
 #ifdef ATOMIC
@@ -258,19 +221,19 @@ struct equi {
       *indices = t.getindex();
       return;
     }
-    const bucket1 &buck = hta.trees1[--r/2][t.bucketid()];
+    const bucket1 &buck = hta.trees1[--r/2][t.bucketid];
     const u32 size = 1 << r;
     u32 *indices1 = indices + size;
-    listindices1(r, buck[t.slotid0()].attr, indices);
-    listindices1(r, buck[t.slotid1()].attr, indices1);
+    listindices1(r, buck[t.slotid0].attr, indices);
+    listindices1(r, buck[t.slotid1].attr, indices1);
     orderindices(indices, size);
   }
   void listindices1(u32 r, const tree t, u32 *indices) {
-    const bucket0 &buck = hta.trees0[--r/2][t.bucketid()];
+    const bucket0 &buck = hta.trees0[--r/2][t.bucketid];
     const u32 size = 1 << r;
     u32 *indices1 = indices + size;
-    listindices0(r, buck[t.slotid0()].attr, indices);
-    listindices0(r, buck[t.slotid1()].attr, indices1);
+    listindices0(r, buck[t.slotid0].attr, indices);
+    listindices0(r, buck[t.slotid1].attr, indices1);
     orderindices(indices, size);
   }
   void candidate(const tree t) {
@@ -452,8 +415,10 @@ struct equi {
           bfull++;
           continue;
         }
+        tree leaf;
+        leaf.setindex(block*HASHESPERBLAKE+i);
         slot0 &s = hta.trees0[0][bucketid][slot];
-        s.attr = tree(block * HASHESPERBLAKE + i);
+        s.attr = leaf;
         memcpy(s.hash->bytes+htl.nextbo, ph+WN/8-hashbytes, hashbytes);
       }
     }
@@ -499,8 +464,10 @@ struct equi {
             bfull++;
             continue;
           }
+          tree xort; xort.bucketid = bucketid;
+          xort.slotid0 = s0; xort.slotid1 = s1;
           slot1 &xs = htl.hta.trees1[r/2][xorbucketid][xorslot];
-          xs.attr = tree(bucketid, s0 , s1);
+          xs.attr = xort;
           for (u32 i=htl.dunits; i < htl.prevhashunits; i++)
             xs.hash[i-htl.dunits].word = pslot0->hash[i].word ^ pslot1->hash[i].word;
         }
@@ -548,8 +515,10 @@ struct equi {
             bfull++;
             continue;
           }
+          tree xort; xort.bucketid = bucketid;
+          xort.slotid0 = s0; xort.slotid1 = s1;
           slot0 &xs = htl.hta.trees0[r/2][xorbucketid][xorslot];
-          xs.attr = tree(bucketid, s0 , s1);
+          xs.attr = xort;
           for (u32 i=htl.dunits; i < htl.prevhashunits; i++)
             xs.hash[i-htl.dunits].word = pslot0->hash[i].word ^ pslot1->hash[i].word;
         }
@@ -571,8 +540,11 @@ struct equi {
         for (; cd.nextcollision(); ) {
           const u32 s0 = cd.slot();
           const slot0 *pslot0 = buck + s0;
-          if (htl.equal(pslot0->hash, pslot1->hash))
-            candidate(tree(bucketid, s0, s1));
+          if (htl.equal(pslot0->hash, pslot1->hash)) {
+            tree xort; xort.bucketid = bucketid;
+            xort.slotid0 = s0; xort.slotid1 = s1;
+            candidate(xort);
+          }
         }
       }
     }

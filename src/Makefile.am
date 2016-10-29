@@ -248,7 +248,15 @@ libbitcoin_wallet_a_SOURCES = \
 EQUIHASH_TROMP_SOURCES = \
   pow/tromp/equi_miner.h \
   pow/tromp/equi.h \
-  pow/tromp/osx_barrier.h
+  pow/tromp/osx_barrier.h \
+  pow/tromp/blake/blake2-config.h \
+  pow/tromp/blake/blake2b-round.h \
+  pow/tromp/blake/blake2b-load-sse41.h \
+  pow/tromp/blake/blake2-impl.h \
+  pow/tromp/blake/blake2b.cpp \
+  pow/tromp/blake/blake2b-load-sse2.h \
+  pow/tromp/blake/blake2-round.h \
+  pow/tromp/blake/blake2.h
 
 # crypto primitives library
 crypto_libbitcoin_crypto_a_CPPFLAGS = $(BITCOIN_CONFIG_INCLUDES) -DEQUIHASH_TROMP_ATOMIC

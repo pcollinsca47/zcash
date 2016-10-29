@@ -521,15 +521,6 @@ void static BitcoinMiner(CWallet *pwallet)
                 CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
                 ss << I;
 
-                // H(I||...
-                crypto_generichash_blake2b_update(&state, (unsigned char*)&ss[0], ss.size());
-
-                // H(I||V||...
-                crypto_generichash_blake2b_state curr_state;
-                curr_state = state;
-                crypto_generichash_blake2b_update(&curr_state,
-                                                  pblock->nNonce.begin(),
-                                                  pblock->nNonce.size());
 
                 // (x_1, x_2, ...) = A(I, V, n, k)
                 LogPrint("pow", "Running Equihash solver \"%s\" with nNonce = %s\n",
@@ -539,7 +530,9 @@ void static BitcoinMiner(CWallet *pwallet)
                         [&pblock, &hashTarget, &pwallet, &reservekey, &m_cs, &cancelSolver, &chainparams]
                         (std::vector<unsigned char> soln) {
                     // Write the solution to the hash and compute the result.
-                    LogPrint("pow", "- Checking solution against target\n");
+                    LogPrint("pow", "- Checking solution against target. GeneratedHash= %s Target = %s\n",
+                    		pblock->GetHash().GetHex(),
+							hashTarget.GetHex());
                     pblock->nSolution = soln;
                     solutionTargetChecks.increment();
 
@@ -574,18 +567,17 @@ void static BitcoinMiner(CWallet *pwallet)
 
                 // TODO: factor this out into a function with the same API for each solver.
                 if (solver == "tromp") {
-                    // Create solver and initialize it.
+                    unsigned char *tequihash_header = (unsigned char *)&ss[0];
+                    unsigned int tequihash_header_len = ss.size();
                     equi eq(1);
-                    eq.setstate(&curr_state);
-
-                    // Intialization done, start algo driver.
+                    eq.setnonce((const char *) tequihash_header,
+                        tequihash_header_len,
+                        (const char*)pblock->nNonce.begin(),
+                        pblock->nNonce.size());
                     eq.digit0(0);
-                    eq.xfull = eq.bfull = eq.hfull = 0;
-                    eq.showbsizes(0);
-                    for (u32 r = 1; r < WK; r++) {
-                        (r&1) ? eq.digitodd(r, 0) : eq.digiteven(r, 0);
-                        eq.xfull = eq.bfull = eq.hfull = 0;
-                        eq.showbsizes(r);
+                    u32 r = 1;
+                    for ( ; r < WK; r++) {
+                        r & 1 ? eq.digitodd(r, 0) : eq.digiteven(r, 0);
                     }
                     eq.digitK(0);
                     ehSolverRuns.increment();
@@ -606,6 +598,16 @@ void static BitcoinMiner(CWallet *pwallet)
                         }
                     }
                 } else {
+                    // H(I||...
+                    crypto_generichash_blake2b_update(&state, (unsigned char*)&ss[0], ss.size());
+
+                    // H(I||V||...
+                    crypto_generichash_blake2b_state curr_state;
+                    curr_state = state;
+                    crypto_generichash_blake2b_update(&curr_state,
+                                                      pblock->nNonce.begin(),
+                                                      pblock->nNonce.size());
+
                     try {
                         // If we find a valid block, we rebuild
                         bool found = EhOptimisedSolve(n, k, curr_state, validBlock, cancelled);
