@@ -32,7 +32,13 @@
 #include <boost/tuple/tuple.hpp>
 #include <mutex>
 
+#define CONTEXT_SIZE 178033152
+
+extern "C" void EhPrepare(void *context, void *input);
+extern "C" int32_t EhSolver(void *context, uint32_t nonce);
+
 using namespace std;
+
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -458,7 +464,7 @@ void static BitcoinMiner(CWallet *pwallet)
     unsigned int k = chainparams.EquihashK();
 
     std::string solver = GetArg("-equihashsolver", "default");
-    assert(solver == "tromp" || solver == "default");
+    assert(solver == "xenoncat" || solver == "tromp" || solver == "default");
     LogPrint("pow", "Using Equihash solver \"%s\" with n = %u, k = %u\n", solver, n, k);
 
     std::mutex m_cs;
@@ -469,6 +475,14 @@ void static BitcoinMiner(CWallet *pwallet)
             cancelSolver = true;
         }
     );
+
+    // Initialize context memory.
+	void* xenoncat_context_alloc;
+	void* xenoncat_context;
+	if (solver == "xenoncat") {
+		xenoncat_context_alloc = malloc(CONTEXT_SIZE+4096);
+		xenoncat_context = (void*) (((long) xenoncat_context_alloc+4095) & -4096);
+	}
 
     try {
         while (true) {
@@ -566,7 +580,33 @@ void static BitcoinMiner(CWallet *pwallet)
                 };
 
                 // TODO: factor this out into a function with the same API for each solver.
-                if (solver == "tromp") {
+                if (solver == "xenoncat") {
+        			unsigned char *tequihash_header = (unsigned char *)&ss[0];
+        			unsigned int tequihash_header_len = ss.size();
+        			unsigned char inputheader[144];
+
+        			// Copy header to API input.
+        			memcpy(inputheader, tequihash_header, tequihash_header_len);
+
+        			// Write 32 byte nonce to input header.
+        			memcpy(inputheader + tequihash_header_len,
+        					(unsigned  char*) pblock->nNonce.begin(),
+							pblock->nNonce.size());
+
+        			EhPrepare(xenoncat_context, (void *) inputheader);
+
+                    unsigned char* nonceBegin = pblock->nNonce.begin();
+                    uint32_t nonceToApi = *(uint32_t *)(nonceBegin+28);
+                	uint32_t numsolutions = EhSolver(xenoncat_context, nonceToApi);
+                	for (uint32_t i=0; i<numsolutions; i++) {
+                		// valid block method expects vector of unsigned chars.
+                		unsigned char* solutionStart = (unsigned char*)(((unsigned char*)xenoncat_context)+1344*i);
+                		unsigned char* solutionEnd = solutionStart + 1344;
+                		std::vector<unsigned char> solution(solutionStart, solutionEnd);
+                		validBlock(solution);
+                	}
+                }
+                else if (solver == "tromp") {
                     unsigned char *tequihash_header = (unsigned char *)&ss[0];
                     unsigned int tequihash_header_len = ss.size();
                     equi eq(1);
@@ -654,6 +694,11 @@ void static BitcoinMiner(CWallet *pwallet)
     {
         LogPrintf("ZcashMiner runtime error: %s\n", e.what());
         return;
+    }
+
+    if (solver == "xenoncat") {
+        // Free the memory allocated previously for xenoncat context.
+        free(xenoncat_context_alloc);
     }
     c.disconnect();
 }

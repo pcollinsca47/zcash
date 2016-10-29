@@ -245,6 +245,8 @@ libbitcoin_wallet_a_SOURCES = \
   $(BITCOIN_CORE_H) \
   $(LIBZCASH_H)
 
+XENONCAT_LIB = pow/xenoncat/equihash_avx2.o
+
 EQUIHASH_TROMP_SOURCES = \
   pow/tromp/equi_miner.h \
   pow/tromp/equi.h \
@@ -259,6 +261,7 @@ EQUIHASH_TROMP_SOURCES = \
   pow/tromp/blake/blake2.h
 
 # crypto primitives library
+crypto_libbitcoin_crypto_a_LIBADD = $(XENONCAT_LIB)
 crypto_libbitcoin_crypto_a_CPPFLAGS = $(BITCOIN_CONFIG_INCLUDES) -DEQUIHASH_TROMP_ATOMIC
 crypto_libbitcoin_crypto_a_SOURCES = \
   crypto/common.h \
@@ -372,7 +375,8 @@ zcashd_LDADD = \
   $(LIBZCASH) \
   $(LIBLEVELDB) \
   $(LIBMEMENV) \
-  $(LIBSECP256K1)
+  $(LIBSECP256K1) \
+  $(XENONCAT_LIB)
 
 if ENABLE_WALLET
 zcashd_LDADD += libbitcoin_wallet.a
